@@ -170,8 +170,8 @@ class PTBEnasModel(object):
     Args:
       lr_dec_every: number of epochs to decay
     """
-    print("-" * 80)
-    print("Build model {}".format(name))
+    tf.logging.info("-" * 80)
+    tf.logging.info("Build model {}".format(name))
 
     self.num_funcs = num_funcs
     self.rnn_l2_reg = rnn_l2_reg
@@ -212,7 +212,7 @@ class PTBEnasModel(object):
     self.valid_loss = None
     self.test_loss = None
 
-    print("Build data ops")
+    tf.logging.info("Build data ops")
     # training data
     self.x_train, self.y_train, self.num_train_batches = ptb_input_producer(
       x_train, self.batch_size, self.bptt_steps)
@@ -246,7 +246,7 @@ class PTBEnasModel(object):
 
     assert self.global_step is not None, "TF op self.global_step not defined."
     global_step = sess.run(self.global_step)
-    print("Eval at {}".format(global_step))
+    tf.logging.info("Eval at {}".format(global_step))
    
     if eval_set == "valid":
       assert self.valid_loss is not None, "TF op self.valid_loss is not defined."
@@ -272,19 +272,19 @@ class PTBEnasModel(object):
       total_loss += curr_loss #np.minimum(curr_loss, 10.0 * bptt_steps * batch_size)
       ppl_sofar = np.exp(total_loss / (bptt_steps * batch_size * (batch_id + 1)))
       if verbose and (batch_id + 1) % 1000 == 0:
-        print("{:<5d} {:<6.2f}".format(batch_id + 1, ppl_sofar))
+        tf.logging.info("{:<5d} {:<6.2f}".format(batch_id + 1, ppl_sofar))
     if verbose:
-      print("")
+      tf.logging.info("")
     log_ppl = total_loss / (num_batches * batch_size * bptt_steps)
     ppl = np.exp(np.minimum(log_ppl, 10.0))
     sess.run(reset_op)
-    print("{}_total_loss: {:<6.2f}".format(eval_set, total_loss))
-    print("{}_log_ppl: {:<6.2f}".format(eval_set, log_ppl))
-    print("{}_ppl: {:<6.2f}".format(eval_set, ppl))
+    tf.logging.info("{}_total_loss: {:<6.2f}".format(eval_set, total_loss))
+    tf.logging.info("{}_log_ppl: {:<6.2f}".format(eval_set, log_ppl))
+    tf.logging.info("{}_ppl: {:<6.2f}".format(eval_set, ppl))
     return ppl
 
   def _build_train(self):
-    print("Build train graph")
+    tf.logging.info("Build train graph")
     all_h, self.train_reset = self._model(self.x_train, True, False)
     log_probs = self._get_log_probs(
       all_h, self.y_train, batch_size=self.batch_size, is_training=True)
@@ -294,8 +294,8 @@ class PTBEnasModel(object):
     tf_variables = [
       var for var in tf.trainable_variables() if var.name.startswith(self.name)]
     self.num_vars = count_model_params(tf_variables)
-    print("-" * 80)
-    print("Model has {} parameters".format(self.num_vars))
+    tf.logging.info("-" * 80)
+    tf.logging.info("Model has {} parameters".format(self.num_vars))
 
     loss = self.loss
     if self.rnn_l2_reg is not None:
@@ -341,8 +341,8 @@ class PTBEnasModel(object):
     return log_probs
 
   def _build_valid(self):
-    print("-" * 80)
-    print("Build valid graph")
+    tf.logging.info("-" * 80)
+    tf.logging.info("Build valid graph")
     all_h, self.valid_reset = self._model(self.x_valid, False, False)
     all_h = tf.stop_gradient(all_h)
     log_probs = self._get_log_probs(all_h, self.y_valid)
@@ -350,8 +350,8 @@ class PTBEnasModel(object):
 
 
   def _build_test(self):
-    print("-" * 80)
-    print("Build test graph")
+    tf.logging.info("-" * 80)
+    tf.logging.info("Build test graph")
     all_h, self.test_reset = self._model(self.x_test, False, True)
     all_h = tf.stop_gradient(all_h)
     log_probs = self._get_log_probs(all_h, self.y_test)

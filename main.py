@@ -134,10 +134,10 @@ def train(mode="train"):
 
   with open(FLAGS.data_path, 'rb') as finp:
     x_train, x_valid, x_test, _, _ = pickle.load(finp, encoding='latin1')
-    print("-" * 80)
-    print("train_size: {0}".format(np.size(x_train)))
-    print("valid_size: {0}".format(np.size(x_valid)))
-    print(" test_size: {0}".format(np.size(x_test)))
+    tf.logging.info("-" * 80)
+    tf.logging.info("train_size: {0}".format(np.size(x_train)))
+    tf.logging.info("valid_size: {0}".format(np.size(x_valid)))
+    tf.logging.info(" test_size: {0}".format(np.size(x_test)))
 
   g = tf.Graph()
   with g.as_default():
@@ -155,8 +155,8 @@ def train(mode="train"):
       sync_replicas_hook = ops["optimizer"].make_session_run_hook(True)
       hooks.append(sync_replicas_hook)
 
-    print("-" * 80)
-    print("Starting session")
+    tf.logging.info("-" * 80)
+    tf.logging.info("Starting session")
     with tf.train.SingularMonitoredSession(
       hooks=hooks, checkpoint_dir=FLAGS.output_dir) as sess:
         start_time = time.time()
@@ -201,11 +201,11 @@ def train(mode="train"):
               np.exp(total_tr_ppl / num_batches))
             log_string += " mins={:<10.2f}".format(
                 float(curr_time - start_time) / 60)
-            print(log_string)
+            tf.logging.info(log_string)
 
           if (FLAGS.reset_train_states is not None and
               np.random.uniform(0, 1) < FLAGS.reset_train_states):
-            print("reset train states")
+            tf.logging.info("reset train states")
             sess.run([
               ops["train_reset"],
               ops["valid_reset"],
@@ -219,7 +219,7 @@ def train(mode="train"):
               ops["test_reset"],
             ])
             
-            print("Epoch {}: Eval".format(epoch))
+            tf.logging.info("Epoch {}: Eval".format(epoch))
             valid_ppl = ops["eval_func"](sess, "valid")
             if valid_ppl < best_valid_ppl:
               best_valid_ppl = valid_ppl
@@ -234,7 +234,7 @@ def train(mode="train"):
             total_tr_ppl = 0
             num_batches = 0
 
-            print("-" * 80)
+            tf.logging.info("-" * 80)
 
           if epoch >= FLAGS.num_epochs:
             ops["eval_func"](sess, "test", verbose=True)
@@ -247,14 +247,15 @@ def store_params():
 
 
 def main(_):
-  print("-" * 80)
+  tf.logging.info("-" * 80)
   if not os.path.isdir(FLAGS.output_dir):
-    print("Path {} does not exist. Creating.".format(FLAGS.output_dir))
+    tf.logging.info("Path {} does not exist. Creating.".format(FLAGS.output_dir))
     os.makedirs(FLAGS.output_dir)
   
   store_params()
   train(mode="train")
 
 if __name__ == "__main__":
+  tf.logging.set_verbosity(tf.logging.INFO)
   tf.app.run()
 
