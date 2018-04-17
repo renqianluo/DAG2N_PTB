@@ -306,7 +306,7 @@ class PTBEnasModel(object):
                tf.to_float(self.batch_size))
     #self.global_step = tf.Variable(
     #  0, dtype=tf.int32, trainable=False, name="global_step")
-    self.global_step = tf.get_or_create_global_step()
+    self.global_step = tf.train.get_or_create_global_step()
     (self.train_op,
      self.lr,
      self.grad_norm,
@@ -360,7 +360,7 @@ class PTBEnasModel(object):
   def _rhn_fixed(self, x, prev_s, w_prev, w_skip, is_training,
                  x_mask=None, s_mask=None):
     batch_size = prev_s.get_shape()[0].value
-    start_idx = self.fixed_arc[0] * 2 * self.lstm_hidden_size
+    start_idx = self.sample_arc[0] * 2 * self.lstm_hidden_size
     end_idx = start_idx + 2 * self.lstm_hidden_size
     if is_training:
       assert x_mask is not None, "x_mask is None"
@@ -372,16 +372,16 @@ class PTBEnasModel(object):
     #   ht = layer_norm(ht, is_training)
     h, t = tf.split(ht, 2, axis=1)
 
-    if self.fixed_arc[0] == 0:
+    if self.sample_arc[0] == 0:
       h = tf.tanh(h)
-    elif self.fixed_arc[0] == 1:
+    elif self.sample_arc[0] == 1:
       h = tf.nn.relu(h)
-    elif self.fixed_arc[0] == 2:
+    elif self.sample_arc[0] == 2:
       h = tf.identity(h)
-    elif self.fixed_arc[0] == 3:
+    elif self.sample_arc[0] == 3:
       h = tf.sigmoid(h)
     else:
-      raise ValueError("Unknown func_idx {}".format(self.fixed_arc[0]))
+      raise ValueError("Unknown func_idx {}".format(self.sample_arc[0]))
     t = tf.sigmoid(t)
     s = prev_s + t * (h - prev_s)
     layers = [s]
@@ -390,8 +390,8 @@ class PTBEnasModel(object):
     used = np.zeros([self.rhn_depth], dtype=np.int32)
     for rhn_layer_id in range(1, self.rhn_depth):
       with tf.variable_scope("rhn_layer_{}".format(rhn_layer_id)):
-        prev_idx = self.fixed_arc[start_idx]
-        func_idx = self.fixed_arc[start_idx + 1]
+        prev_idx = self.sample_arc[start_idx]
+        func_idx = self.sample_arc[start_idx + 1]
         used[prev_idx] = 1
         prev_s = layers[prev_idx]
         if is_training:
@@ -562,6 +562,9 @@ class PTBEnasModel(object):
                                                trainable=False))
 
   def __call__(self):
+    self.sample_arc = np.array(
+      [x for x in self.fixed_arc.split(' ') if x], dtype=np.int32)
+
     self._build_params()
     self._build_train()
     self._build_valid()

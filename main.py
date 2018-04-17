@@ -7,6 +7,7 @@ import pickle
 import shutil
 import sys
 import time
+import json
 
 import numpy as np
 import tensorflow as tf
@@ -153,8 +154,6 @@ def train(mode="train"):
     if FLAGS.sync_replicas:
       sync_replicas_hook = ops["optimizer"].make_session_run_hook(True)
       hooks.append(sync_replicas_hook)
-    if FLAGS.controller_training and FLAGS.controller_sync_replicas:
-      hooks.append(ops["optimizer"].make_session_run_hook(True))
 
     print("-" * 80)
     print("Starting session")
@@ -242,9 +241,9 @@ def train(mode="train"):
             break
 
 def store_params():
-  params = vars(FLAGS)
+  params = vars(FLAGS)['__flags']
   with open(os.path.join(FLAGS.output_dir, 'hparam.json'), 'w') as f:
-    json.dump(f, params)
+    json.dump(params, f)
 
 
 def main(_):
