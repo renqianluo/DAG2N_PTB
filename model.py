@@ -235,6 +235,7 @@ class PTBEnasModel(object):
 
     self.x_valid_raw = x_valid
 
+
   def eval_once(self, sess, eval_set, feed_dict=None, verbose=False):
     """Expects self.acc and self.global_step to be defined.
 
@@ -288,7 +289,8 @@ class PTBEnasModel(object):
     all_h, self.train_reset = self._model(self.x_train, True, False)
     log_probs = self._get_log_probs(
       all_h, self.y_train, batch_size=self.batch_size, is_training=True)
-    self.loss = tf.reduce_sum(log_probs) / tf.to_float(self.batch_size)
+    total_log_probs = tf.reduce_sum(log_probs)
+    self.loss = total_log_probs / tf.to_float(self.batch_size)
     self.train_ppl = tf.exp(tf.reduce_mean(log_probs))
 
     tf_variables = [
@@ -336,9 +338,12 @@ class PTBEnasModel(object):
 
   def _get_log_probs(self, all_h, labels, batch_size=None, is_training=False):
     logits = tf.matmul(all_h, self.w_emb, transpose_b=True)
-    log_probs = tf.nn.sparse_softmax_cross_entropy_with_logits(
+    norm_all_h = tf.Print(all_h, ['|all_h|',tf.nn.l2_loss(all_h)])
+    sum_logits = tf.reduce_sum(logits)
+    sum_logits = tf.Print(sum_logits, ['sum_logits',sum_logits])
+    with tf.control_dependencies([norm_all_h, sum_logits]):  
+      log_probs = tf.nn.sparse_softmax_cross_entropy_with_logits(
       logits=logits, labels=labels)
-
     return log_probs
 
   def _build_valid(self):
@@ -434,8 +439,9 @@ class PTBEnasModel(object):
       batch_size = self.batch_size
 
     all_h = tf.TensorArray(tf.float32, size=num_steps, infer_shape=True)
+    x = tf.Print(x, ['x',x], summarize=64*35)
     embedding = tf.nn.embedding_lookup(self.w_emb, x)
-
+    embedding = tf.Print(embedding, ['emb', embedding], summarize=64*35)
     if is_training:
       def _gen_mask(shape, keep_prob):
         _mask = tf.random_uniform(shape, dtype=tf.float32)
@@ -458,7 +464,7 @@ class PTBEnasModel(object):
       e_mask = tf.where(r, tf.zeros_like(e_mask), e_mask)
       e_mask = tf.reshape(e_mask, [batch_size, num_steps, 1])
       embedding *= e_mask
-
+      embedding = tf.Print(embedding, ['emb_masked', embedding], summarize=64*35)
       # variational dropout in the hidden layers
       x_mask, h_mask = [], []
       for layer_id in range(self.lstm_num_layers):
@@ -493,8 +499,10 @@ class PTBEnasModel(object):
             next_h.append(curr_h)
 
         out_h = next_h[-1]
+        out_h = tf.Print(out_h, ['out_h', out_h], summarize=35*64)
         if is_training:
           out_h *= o_mask
+          out_h = tf.Print(out_h, ['out_h_masked', out_h], summarize=35*64)
         all_h = all_h.write(step, out_h)
       return step + 1, next_h, all_h
     
