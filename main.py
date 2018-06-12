@@ -120,6 +120,7 @@ def get_ops(x_train, x_valid, x_test):
     "test_reset": model.test_reset,
     "lr": model.lr,
     "grad_norm": model.grad_norm,
+    "new_grad_norm": model.new_grad_norm,
     "optimizer": model.optimizer,
     'num_train_batches' : model.num_train_batches,
     'eval_every' : model.num_train_batches * FLAGS.eval_every_epochs,
@@ -176,10 +177,11 @@ def train(mode="train"):
             ops["loss"],
             ops["lr"],
             ops["grad_norm"],
+            ops["new_grad_norm"],
             ops["train_ppl"],
             ops["train_op"],
           ]
-          loss, lr, gn, tr_ppl, _ = sess.run(run_ops)
+          loss, lr, gn, new_gn, tr_ppl, _ = sess.run(run_ops)
           num_batches += 1
           total_tr_ppl += loss / FLAGS.bptt_steps
           global_step = sess.run(ops["global_step"])
@@ -197,6 +199,7 @@ def train(mode="train"):
             log_string += " loss={:<8.4f}".format(loss)
             log_string += " lr={:<8.4f}".format(lr)
             log_string += " |g|={:<10.2f}".format(gn)
+            log_string += " |new_g|={:<10.2f}".format(new_gn)
             log_string += " tr_ppl={:<8.2f}".format(
               np.exp(total_tr_ppl / num_batches))
             log_string += " mins={:<10.2f}".format(

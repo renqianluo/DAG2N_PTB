@@ -310,6 +310,7 @@ class PTBEnasModel(object):
     (self.train_op,
      self.lr,
      self.grad_norm,
+     self.new_grad_norm,
      self.optimizer,
      self.grad_norms) = get_train_ops(
        loss,
@@ -360,8 +361,6 @@ class PTBEnasModel(object):
   def _rhn_fixed(self, x, prev_s, w_prev, w_skip, is_training,
                  x_mask=None, s_mask=None):
     batch_size = prev_s.get_shape()[0].value
-    start_idx = self.sample_arc[0] * 2 * self.lstm_hidden_size
-    end_idx = start_idx + 2 * self.lstm_hidden_size
     if is_training:
       assert x_mask is not None, "x_mask is None"
       assert s_mask is not None, "s_mask is None"
@@ -465,7 +464,7 @@ class PTBEnasModel(object):
       for layer_id in range(self.lstm_num_layers):
         x_mask.append(_gen_mask([batch_size, self.lstm_hidden_size], self.lstm_x_keep))
         h_mask.append(_gen_mask([batch_size, self.lstm_hidden_size], self.lstm_h_keep))
-        h_mask.append(h_mask)
+        #h_mask.append(h_mask)
 
       # variational dropout in the output layer
       o_mask = _gen_mask([batch_size, self.lstm_hidden_size], self.lstm_o_keep)
@@ -488,7 +487,7 @@ class PTBEnasModel(object):
               x_mask=x_mask[layer_id] if is_training else None,
               s_mask=h_mask[layer_id] if is_training else None)
 
-            if self.lstm_l_skip:
+            if self.lstm_l_skip:  #skip connections
               curr_h += inputs
 
             next_h.append(curr_h)

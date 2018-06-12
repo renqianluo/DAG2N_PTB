@@ -90,6 +90,7 @@ def get_train_ops(
       grads = clipped
     else:
       raise NotImplementedError("Unknown clip_mode {}".format(clip_mode))
+  new_grad_norm = tf.global_norm(grads)
   
   if lr_cosine:
     assert lr_max is not None, "Need lr_max to use lr_cosine"
@@ -178,7 +179,7 @@ def get_train_ops(
     zip(grads, tf_variables), global_step=train_step)
 
   if get_grad_norms:
-    return train_op, learning_rate, grad_norm, opt, grad_norms
+    return train_op, learning_rate, grad_norm, new_grad_norm, opt, grad_norms
   else:
-    return train_op, learning_rate, grad_norm, opt
+    return train_op, learning_rate, grad_norm, new_grad_norm, opt
 
