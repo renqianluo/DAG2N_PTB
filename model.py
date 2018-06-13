@@ -8,6 +8,7 @@ import sys
 import numpy as np
 import tensorflow as tf
 
+from tensorflow.python.training import moving_averages
 from utils import count_model_params
 from utils import get_train_ops
 from six.moves import xrange
@@ -90,6 +91,13 @@ def batch_norm(x, is_training, name="batch_norm", decay=0.999, epsilon=1.0):
       x = scale * (x - moving_mean) / tf.sqrt(epsilon + moving_variance) + offset
   return x
 
+def tf_batch_norm(x, is_training):
+  with tf.variable_scope('batch_norm', reuse=None if is_training else True):
+    x = tf.layers.batch_normalization(
+      inputs=x, axis=-1,
+      momentum=0.999, epsilon=1.0, center=True,
+      scale=True, training=is_training, fused=True)
+  return x
 
 def lstm(x, prev_c, prev_h, w):
   ifog = tf.matmul(tf.concat([x, prev_h], axis=1), w)
@@ -125,7 +133,7 @@ def create_bias(name, shape, initializer=None):
   return tf.get_variable(name, shape, initializer=initializer)
 
 
-class PTBEnasModel(object):
+class PTBNASModel(object):
   def __init__(self,
                x_train,
                x_valid,
@@ -158,9 +166,6 @@ class PTBEnasModel(object):
                grad_bound=5.0,
                optim_algo=None,
                optim_moving_average=None,
-               sync_replicas=False,
-               num_aggregate=None,
-               num_replicas=None,
                temperature=None,
                name="ptb_lstm",
                seed=None,
@@ -200,9 +205,6 @@ class PTBEnasModel(object):
 
     self.optim_algo = optim_algo
     self.optim_moving_average = optim_moving_average
-    self.sync_replicas = sync_replicas
-    self.num_aggregate = num_aggregate
-    self.num_replicas = num_replicas
     self.temperature = temperature
 
     self.name = name
@@ -306,13 +308,11 @@ class PTBEnasModel(object):
     if self.rnn_slowness_reg is not None:
       loss += (self.rnn_slowness_reg * self.all_h_diff /
                tf.to_float(self.batch_size))
-    #self.global_step = tf.Variable(
-    #  0, dtype=tf.int32, trainable=False, name="global_step")
+    
     self.global_step = tf.train.get_or_create_global_step()
     (self.train_op,
      self.lr,
      self.grad_norm,
-     self.new_grad_norm,
      self.optimizer,
      self.grad_norms) = get_train_ops(
        loss,
@@ -330,19 +330,12 @@ class PTBEnasModel(object):
        lr_dec_min=self.lr_dec_min,
        optim_algo=self.optim_algo,
        moving_average=self.optim_moving_average,
-       sync_replicas=self.sync_replicas,
-       num_aggregate=self.num_aggregate,
-       num_replicas=self.num_replicas,
        get_grad_norms=True,
      )
 
   def _get_log_probs(self, all_h, labels, batch_size=None, is_training=False):
     logits = tf.matmul(all_h, self.w_emb, transpose_b=True)
-    norm_all_h = tf.Print(all_h, ['|all_h|',tf.nn.l2_loss(all_h)])
-    sum_logits = tf.reduce_sum(logits)
-    sum_logits = tf.Print(sum_logits, ['sum_logits',sum_logits])
-    with tf.control_dependencies([norm_all_h, sum_logits]):  
-      log_probs = tf.nn.sparse_softmax_cross_entropy_with_logits(
+    log_probs = tf.nn.sparse_softmax_cross_entropy_with_logits(
       logits=logits, labels=labels)
     return log_probs
 
@@ -372,8 +365,8 @@ class PTBEnasModel(object):
       ht = tf.matmul(tf.concat([x * x_mask, prev_s * s_mask], axis=1), w_prev)
     else:
       ht = tf.matmul(tf.concat([x, prev_s], axis=1), w_prev)
-    # with tf.variable_scope("rhn_layer_0"):
-    #   ht = layer_norm(ht, is_training)
+    with tf.variable_scope("rhn_layer_0"):
+      ht = layer_norm(ht, is_training)
     h, t = tf.split(ht, 2, axis=1)
 
     if self.sample_arc[0] == 0:
@@ -402,7 +395,7 @@ class PTBEnasModel(object):
           ht = tf.matmul(prev_s * s_mask, w_skip[rhn_layer_id])
         else:
           ht = tf.matmul(prev_s, w_skip[rhn_layer_id])
-        # ht = layer_norm(ht, is_training)
+        ht = layer_norm(ht, is_training)
         h, t = tf.split(ht, 2, axis=1)
 
         if func_idx == 0:
@@ -439,9 +432,7 @@ class PTBEnasModel(object):
       batch_size = self.batch_size
 
     all_h = tf.TensorArray(tf.float32, size=num_steps, infer_shape=True)
-    x = tf.Print(x, ['x',x], summarize=64*35)
     embedding = tf.nn.embedding_lookup(self.w_emb, x)
-    embedding = tf.Print(embedding, ['emb', embedding], summarize=64*35)
     if is_training:
       def _gen_mask(shape, keep_prob):
         _mask = tf.random_uniform(shape, dtype=tf.float32)
@@ -464,13 +455,11 @@ class PTBEnasModel(object):
       e_mask = tf.where(r, tf.zeros_like(e_mask), e_mask)
       e_mask = tf.reshape(e_mask, [batch_size, num_steps, 1])
       embedding *= e_mask
-      embedding = tf.Print(embedding, ['emb_masked', embedding], summarize=64*35)
       # variational dropout in the hidden layers
       x_mask, h_mask = [], []
       for layer_id in range(self.lstm_num_layers):
         x_mask.append(_gen_mask([batch_size, self.lstm_hidden_size], self.lstm_x_keep))
         h_mask.append(_gen_mask([batch_size, self.lstm_hidden_size], self.lstm_h_keep))
-        #h_mask.append(h_mask)
 
       # variational dropout in the output layer
       o_mask = _gen_mask([batch_size, self.lstm_hidden_size], self.lstm_o_keep)
@@ -499,10 +488,8 @@ class PTBEnasModel(object):
             next_h.append(curr_h)
 
         out_h = next_h[-1]
-        out_h = tf.Print(out_h, ['out_h', out_h], summarize=35*64)
         if is_training:
           out_h *= o_mask
-          out_h = tf.Print(out_h, ['out_h_masked', out_h], summarize=35*64)
         all_h = all_h.write(step, out_h)
       return step + 1, next_h, all_h
     
@@ -512,7 +499,7 @@ class PTBEnasModel(object):
     all_h = loop_outputs[-1].stack()
     all_h_diff = (all_h[1:, :, :] - all_h[:-1, :, :]) ** 2
     self.all_h_diff = tf.reduce_sum(all_h_diff)
-    all_h = tf.transpose(all_h, [1, 0, 2])
+    all_h = tf.transpose(all_h, [1, 0, 2])#from [ts,bs,h] to [bs,ts,h]
     all_h = tf.reshape(all_h, [batch_size * num_steps, self.lstm_hidden_size])
     
     carry_states = []

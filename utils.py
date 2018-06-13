@@ -44,9 +44,6 @@ def get_train_ops(
     lr_T_mul=None,
     num_train_batches=None,
     optim_algo=None,
-    sync_replicas=False,
-    num_aggregate=None,
-    num_replicas=None,
     get_grad_norms=False,
     moving_average=None):
   """
@@ -90,7 +87,6 @@ def get_train_ops(
       grads = clipped
     else:
       raise NotImplementedError("Unknown clip_mode {}".format(clip_mode))
-  new_grad_norm = tf.global_norm(grads)
   
   if lr_cosine:
     assert lr_max is not None, "Need lr_max to use lr_cosine"
@@ -133,23 +129,6 @@ def get_train_ops(
     learning_rate = tf.cond(tf.less(train_step, lr_warmup_steps),
                             lambda: lr_warmup_val, lambda: learning_rate)
 
-  # if get_grad_norms:
-  #   g_1, g_2 = 0.0001, 0.0001
-  #   for v, g in zip(tf_variables, grads):
-  #     if g is not None:
-  #       if isinstance(g, tf.IndexedSlices):
-  #         g_n = tf.reduce_sum(g.values ** 2)
-  #       else:
-  #         g_n = tf.reduce_sum(g ** 2)
-  #       if "enas_cell" in v.name:
-  #         print("g_1: {}".format(v.name))
-  #         g_1 += g_n
-  #       else:
-  #         print("g_2: {}".format(v.name))
-  #         g_2 += g_n
-  #   learning_rate = tf.Print(learning_rate, [g_1, g_2, tf.sqrt(g_1 / g_2)],
-  #                            message="g_1, g_2, g_1/g_2: ", summarize=5)
-
   if optim_algo == "momentum":
     opt = tf.train.MomentumOptimizer(
       learning_rate, 0.9, use_locking=True, use_nesterov=True)
@@ -161,15 +140,6 @@ def get_train_ops(
   else:
     raise ValueError("Unknown optim_algo {}".format(optim_algo))
 
-  if sync_replicas:
-    assert num_aggregate is not None, "Need num_aggregate to sync."
-    assert num_replicas is not None, "Need num_replicas to sync."
-
-    opt = tf.train.SyncReplicasOptimizer(
-      opt,
-      replicas_to_aggregate=num_aggregate,
-      total_num_replicas=num_replicas,
-      use_locking=True)
 
   if moving_average is not None:
     opt = tf.contrib.opt.MovingAverageOptimizer(
@@ -179,7 +149,7 @@ def get_train_ops(
     zip(grads, tf_variables), global_step=train_step)
 
   if get_grad_norms:
-    return train_op, learning_rate, grad_norm, new_grad_norm, opt, grad_norms
+    return train_op, learning_rate, grad_norm, opt, grad_norms
   else:
-    return train_op, learning_rate, grad_norm, new_grad_norm, opt
+    return train_op, learning_rate, grad_norm, opt
 

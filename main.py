@@ -12,7 +12,7 @@ import json
 import numpy as np
 import tensorflow as tf
 
-from model import PTBEnasModel
+from model import PTBNASModel
 from six.moves import xrange
 
 
@@ -21,7 +21,6 @@ FLAGS = flags.FLAGS
 
 flags.DEFINE_string("data_path", "", "")
 flags.DEFINE_string("output_dir", "", "")
-
 flags.DEFINE_string("fixed_arc", None, "")
 flags.DEFINE_integer("batch_size", 25, "")
 flags.DEFINE_integer("base_number", 4, "")
@@ -52,14 +51,7 @@ flags.DEFINE_integer("block_size", 1, "")
 flags.DEFINE_integer("rhn_depth", 4, "")
 flags.DEFINE_integer("lr_warmup_steps", None, "")
 flags.DEFINE_string("optim_algo", "sgd", "")
-
-flags.DEFINE_boolean("sync_replicas", False, "")
-flags.DEFINE_integer("num_aggregate", 1, "")
-flags.DEFINE_integer("num_replicas", 1, "")
-
-
 flags.DEFINE_integer("num_epochs", 300, "")
-
 flags.DEFINE_integer("log_every", 100, "How many steps to log")
 flags.DEFINE_integer("eval_every_epochs", 1, "How many epochs to eval")
 
@@ -72,7 +64,7 @@ def get_ops(x_train, x_valid, x_test):
   assert FLAGS.lstm_hidden_size % FLAGS.block_size == 0, (
     "--block_size has to divide lstm_hidden_size")
 
-  model = PTBEnasModel(
+  model = PTBNASModel(
     x_train,
     x_valid,
     x_test,
@@ -102,11 +94,8 @@ def get_ops(x_train, x_valid, x_test):
     clip_mode="global",
     grad_bound=FLAGS.grad_bound,
     optim_algo="sgd",
-    sync_replicas=FLAGS.sync_replicas,
-    num_aggregate=FLAGS.num_aggregate,
-    num_replicas=FLAGS.num_replicas,
     temperature=FLAGS.temperature,
-    name="ptb_enas_model")
+    name="ptb_nas_model")
 
   model()
 
@@ -120,7 +109,6 @@ def get_ops(x_train, x_valid, x_test):
     "test_reset": model.test_reset,
     "lr": model.lr,
     "grad_norm": model.grad_norm,
-    "new_grad_norm": model.new_grad_norm,
     "optimizer": model.optimizer,
     'num_train_batches' : model.num_train_batches,
     'eval_every' : model.num_train_batches * FLAGS.eval_every_epochs,
@@ -152,9 +140,6 @@ def train(mode="train"):
       FLAGS.output_dir, save_steps=ops["num_train_batches"], saver=saver)
 
     hooks = [checkpoint_saver_hook]
-    if FLAGS.sync_replicas:
-      sync_replicas_hook = ops["optimizer"].make_session_run_hook(True)
-      hooks.append(sync_replicas_hook)
 
     tf.logging.info("-" * 80)
     tf.logging.info("Starting session")
@@ -177,19 +162,14 @@ def train(mode="train"):
             ops["loss"],
             ops["lr"],
             ops["grad_norm"],
-            ops["new_grad_norm"],
             ops["train_ppl"],
             ops["train_op"],
           ]
-          loss, lr, gn, new_gn, tr_ppl, _ = sess.run(run_ops)
+          loss, lr, gn, tr_ppl, _ = sess.run(run_ops)
           num_batches += 1
           total_tr_ppl += loss / FLAGS.bptt_steps
           global_step = sess.run(ops["global_step"])
-
-          if FLAGS.sync_replicas:
-            actual_step = global_step * FLAGS.num_aggregate
-          else:
-            actual_step = global_step
+          actual_step = global_step
           epoch = actual_step // ops["num_train_batches"]
           curr_time = time.time()
           if global_step % FLAGS.log_every == 0:
@@ -199,7 +179,6 @@ def train(mode="train"):
             log_string += " loss={:<8.4f}".format(loss)
             log_string += " lr={:<8.4f}".format(lr)
             log_string += " |g|={:<10.2f}".format(gn)
-            log_string += " |new_g|={:<10.2f}".format(new_gn)
             log_string += " tr_ppl={:<8.2f}".format(
               np.exp(total_tr_ppl / num_batches))
             log_string += " mins={:<10.2f}".format(
