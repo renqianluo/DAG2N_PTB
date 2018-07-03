@@ -231,6 +231,7 @@ def store_params():
 
 
 def main(_):
+  tf.set_random_seed(FLAGS.seed)
   tf.logging.info("-" * 80)
   if not os.path.isdir(FLAGS.output_dir):
     tf.logging.info("Path {} does not exist. Creating.".format(FLAGS.output_dir))

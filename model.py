@@ -522,7 +522,7 @@ class PTBNASModel(object):
     else:
       init_range = 0.04
     initializer = tf.random_uniform_initializer(
-      minval=-init_range, maxval=init_range, seed=self.seed)
+      minval=-init_range, maxval=init_range)
     with tf.variable_scope(self.name, initializer=initializer):
       with tf.variable_scope("rnn"):
         self.w_prev, self.w_skip = [], []
