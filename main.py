@@ -96,7 +96,6 @@ def get_ops(x_train, x_valid, x_test):
     grad_bound=FLAGS.grad_bound,
     optim_algo="sgd",
     temperature=FLAGS.temperature,
-    seed=FLAGS.seed,
     name="ptb_nas_model")
 
   model()
