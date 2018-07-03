@@ -54,6 +54,7 @@ flags.DEFINE_string("optim_algo", "sgd", "")
 flags.DEFINE_integer("num_epochs", 300, "")
 flags.DEFINE_integer("log_every", 100, "How many steps to log")
 flags.DEFINE_integer("eval_every_epochs", 1, "How many epochs to eval")
+flags.DEFINE_integer("seed", 331, "random seed")
 
 
 def get_ops(x_train, x_valid, x_test):
@@ -95,6 +96,7 @@ def get_ops(x_train, x_valid, x_test):
     grad_bound=FLAGS.grad_bound,
     optim_algo="sgd",
     temperature=FLAGS.temperature,
+    seed=FLAGS.seed,
     name="ptb_nas_model")
 
   model()
